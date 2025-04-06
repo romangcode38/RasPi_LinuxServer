@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Sensor Data</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <canvas id="sensorChart"></canvas>
+    <script>
+        const ctx = document.getElementById('sensorChart').getContext('2d');
+        const sensorChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    { label: 'Temperature', data: [], borderColor: 'red', fill: false },
+                    { label: 'Humidity', data: [], borderColor: 'blue', fill: false },
+                    { label: 'Light', data: [], borderColor: 'yellow', fill: false }
+                ]
+            },
+            options: {
+                responsive: true,
+                scales: { x: { title: { display: true, text: 'Time' } }, y: { title: { display: true, text: 'Value' } } }
+            }
+        });
+
+        async function fetchData() {
+            try {
+                const response = await fetch('/data');
+                if (!response.ok) throw new Error('Network response was not ok');
+                const data = await response.json();
+                const timeLabel = new Date().toLocaleTimeString();
+
+                sensorChart.data.labels.push(timeLabel);
+                sensorChart.data.datasets[0].data.push(data.temperature);
+                sensorChart.data.datasets[1].data.push(data.humidity);
+                sensorChart.data.datasets[2].data.push(data.light);
+
+                if (sensorChart.data.labels.length > 10) {
+                    sensorChart.data.labels.shift();
+                    sensorChart.data.datasets.forEach(dataset => dataset.data.shift());
+                }
+
+                sensorChart.update();
+            } catch (error) {
+                console.error('Fetch error:', error);
+            }
+        }
+
+        setInterval(fetchData, 2000);
+    </script>
+</body>
+</html>
