@@ -2,25 +2,32 @@ import paho.mqtt.client as mqtt
 import threading
 import time
 import json
-from flask import Flask, jsonify, render_template  # Added render_template here
+from collections import deque
+from flask import Flask, jsonify, render_template
 from flask_cors import CORS
 
 # MQTT Configuration
 mqtt_broker = "192.168.8.176"
 mqtt_port = 1883
 client_list = []
+last_update = 0
+
+# Sensor history for temporal logic (store last N seconds)
+history_duration = 120  # seconds
+sensor_history = deque(maxlen=history_duration)
+
+# Flask app setup
+app = Flask(__name__, template_folder='templates')
+CORS(app)
+
+# Current sensor data
 sensor_data = {
     "temperature": 0,
     "humidity": 0,
-    "light": 0  # This will remain 0 unless you add a light sensor
+    "gas": 0
 }
-last_update = 0
 
-# Flask Web Server
-app = Flask(__name__, template_folder='templates')
-CORS(app)  # Enable CORS for all routes
-
-# MQTT Client Setup
+# MQTT client setup
 mqtt_client = mqtt.Client()
 
 def on_connect(client, userdata, flags, rc):
@@ -47,7 +54,7 @@ def on_message(client, userdata, msg):
             sensor_data.update({
                 "temperature": data.get("temperature", sensor_data["temperature"]),
                 "humidity": data.get("humidity", sensor_data["humidity"]),
-                # Light remains unchanged unless provided
+                "gas": data.get("gas", sensor_data["gas"])
             })
             
             last_update = time.time()
@@ -64,22 +71,57 @@ def run_mqtt():
         mqtt_client.loop()
         time.sleep(0.1)
 
+def process_temporal_data():
+    while True:
+        now = time.time()
+        current_snapshot = {
+            "timestamp": now,
+            "temperature": sensor_data["temperature"],
+            "humidity": sensor_data["humidity"],
+            "gas": sensor_data["gas"]
+        }
+        sensor_history.append(current_snapshot)
+        time.sleep(1)
+
+def compute_averages(duration=30):
+    now = time.time()
+    recent_data = [entry for entry in sensor_history if now - entry["timestamp"] <= duration]
+
+    if not recent_data:
+        return {
+            "avg_temperature": 0,
+            "avg_humidity": 0,
+            "avg_gas": 0
+        }
+
+    avg_temp = sum(d["temperature"] for d in recent_data) / len(recent_data)
+    avg_humidity = sum(d["humidity"] for d in recent_data) / len(recent_data)
+    avg_gas = sum(d["gas"] for d in recent_data) / len(recent_data)
+
+    return {
+        "avg_temperature": round(avg_temp, 2),
+        "avg_humidity": round(avg_humidity, 2),
+        "avg_gas": round(avg_gas, 2)
+    }
+
+# Flask routes
 @app.route('/')
 def home():
     return render_template('index.html')
 
 @app.route('/data')
 def get_data():
+    avg_data = compute_averages(duration=30)  # Change window if needed
     return jsonify({
-        "temperature": sensor_data["temperature"],
-        "humidity": sensor_data["humidity"],
-        "light": sensor_data["light"],
+        "current": sensor_data,
+        "averages": avg_data,
         "last_update": last_update
     })
 
 if __name__ == "__main__":
     # Start MQTT thread
     threading.Thread(target=run_mqtt, daemon=True).start()
+    threading.Thread(target=process_temporal_data, daemon=True).start()
     print("MQTT server running...")
     
     # Start Flask web server

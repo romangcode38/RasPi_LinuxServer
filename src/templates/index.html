@@ -17,12 +17,15 @@
                 datasets: [
                     { label: 'Temperature', data: [], borderColor: 'red', fill: false },
                     { label: 'Humidity', data: [], borderColor: 'blue', fill: false },
-                    { label: 'Light', data: [], borderColor: 'yellow', fill: false }
+                    { label: 'Gas', data: [], borderColor: 'green', fill: false }
                 ]
             },
             options: {
                 responsive: true,
-                scales: { x: { title: { display: true, text: 'Time' } }, y: { title: { display: true, text: 'Value' } } }
+                scales: {
+                    x: { title: { display: true, text: 'Time' } },
+                    y: { title: { display: true, text: 'Value' } }
+                }
             }
         });
 
@@ -31,12 +34,14 @@
                 const response = await fetch('/data');
                 if (!response.ok) throw new Error('Network response was not ok');
                 const data = await response.json();
+
+                const current = data.current;
                 const timeLabel = new Date().toLocaleTimeString();
 
                 sensorChart.data.labels.push(timeLabel);
-                sensorChart.data.datasets[0].data.push(data.temperature);
-                sensorChart.data.datasets[1].data.push(data.humidity);
-                sensorChart.data.datasets[2].data.push(data.light);
+                sensorChart.data.datasets[0].data.push(current.temperature);
+                sensorChart.data.datasets[1].data.push(current.humidity);
+                sensorChart.data.datasets[2].data.push(current.gas);
 
                 if (sensorChart.data.labels.length > 10) {
                     sensorChart.data.labels.shift();
